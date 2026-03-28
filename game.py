@@ -63,19 +63,19 @@ class Vec2:
     def __init__(self, _x, _y):
         self.x = _x
         self.y = _y
-    def __add__(self, other: Vec2):
+    def __add__(self, other: "Vec2"):
         return Vec2(self.x + other.x, self.y + other.y)
-    def __sub__(self, other: Vec2):
+    def __sub__(self, other: "Vec2"):
         return Vec2(self.x - other.x, self.y - other.y)
     def __mul__(self, num):
         return Vec2(self.x * num, self.y * num)
     def __truediv__(self, num):
         return Vec2(self.x / num, self.y / num)
-    def __iadd__(self, other: Vec2):
+    def __iadd__(self, other: "Vec2"):
         self.x += other.x
         self.y += other.y
         return self
-    def __isub__(self, other: Vec2):
+    def __isub__(self, other: "Vec2"):
         self.x -= other.x
         self.y -= other.y
         return self
@@ -87,12 +87,12 @@ class Vec2:
         self.x /= num
         self.y /= num
         return self
-    def vectorDist(self, other: Vec2):
+    def vectorDist(self, other: "Vec2"):
         return Vec2(other.x - self.x, other.y - self.y)
-    def dist(self, other: Vec2):
+    def dist(self, other: "Vec2"):
         vecDist = self.vectorDist(other)
         return np.sqrt(vecDist.x*vecDist.x + vecDist.y*vecDist.y)
-    def vectorDistNormalized(self, other: Vec2):
+    def vectorDistNormalized(self, other: "Vec2"):
         vecDist = self.vectorDist(other)
         hypo = np.sqrt(vecDist.x*vecDist.x + vecDist.y*vecDist.y)
         if (hypo <= 0):
@@ -190,7 +190,7 @@ class _Player:
             return True
         return False
     
-    def resolve_collision(self, other: _Player):
+    def resolve_collision(self, other: "_Player"):
         """Push both players apart so they no longer overlap."""
         min_dist = self.RADIUS + other.RADIUS
         dist = self.coordinate.dist(other.coordinate)
