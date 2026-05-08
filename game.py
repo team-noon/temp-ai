@@ -39,7 +39,15 @@ import numpy as np
 import pygame
 import gymnasium as gym
 from gymnasium import spaces
+import argparse
 
+import torch as th
+from typing import Tuple
+import onnx
+import onnxruntime as ort
+
+parser = argparse.ArgumentParser(description="Set flag")
+parser.add_argument('-w', action='store_true')
 
 # ──────────────────────────────────────────────
 # Constants
@@ -574,6 +582,18 @@ class SoccerEnv(gym.Env):
             return np.transpose(pygame.surfarray.array3d(surf), axes=(1, 0, 2))
         return None
 
+class OnnxableSB3Policy(th.nn.Module):
+    def __init__(self, policy: BasePolicy):
+        super().__init__()
+        self.policy = policy
+
+    def forward(self, observation: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+        # NOTE: Preprocessing is included, but postprocessing
+        # (clipping/inscaling actions) is not,
+        # If needed, you also need to transpose the images so that they are channel first
+        # use deterministic=False if you want to export the stochastic policy
+        # policy() returns `actions, values, log_prob` for PPO
+        return self.policy(observation, deterministic=True)
 
 # ──────────────────────────────────────────────
 # Run this file directly to train + watch
@@ -582,6 +602,20 @@ if __name__ == "__main__":
     from stable_baselines3 import PPO
     from stable_baselines3.common.env_checker import check_env
 
+    args = parser.parse_args()
+    if args.w:
+        session = ort.InferenceSession("model.onnx")
+        env = SoccerEnv(render_mode="human")
+        obs, _ = env.reset()
+        env.opponent.difficulty = 1.0
+        while True:
+            obs_input = obs.reshape(1, -1).astype(np.float32)
+            action = session.run(["action"], {"observation": obs_input})[0][0]
+            obs, reward, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                print(info)
+                obs, _ = env.reset()
+                env.opponent.difficulty = 1.0
     print("=== Checking environment …")
     train_env = SoccerEnv(render_mode=None)
     check_env(train_env, warn=True)
@@ -610,18 +644,16 @@ if __name__ == "__main__":
         train_env.reset()
         train_env.opponent.difficulty = difficulty
         model.learn(total_timesteps=steps, reset_num_timesteps=False)
-    model.save("soccer_ppo")
-    print("=== Model saved to soccer_ppo.zip\n")
-
-    print("=== Watching trained agent …")
-    eval_env = SoccerEnv(render_mode="human")
-    obs, _   = eval_env.reset()
-    eval_env.opponent.difficulty = 0.8
-    for _ in range(20_000):
-        action, _ = model.predict(obs, deterministic=True)
-        obs, _, terminated, truncated, info = eval_env.step(action)
-        if terminated or truncated:
-            print(info)
-            obs, _ = eval_env.reset()
-            eval_env.opponent.difficulty = 0.8
-    eval_env.close()
+    onnx_policy = OnnxableSB3Policy(model.policy)
+    onnx_policy.eval()
+    observation_size = model.observation_space.shape
+    dummy_input = th.randn(1, *observation_size)
+    th.onnx.export(
+        onnx_policy,
+        dummy_input,
+        "model.onnx",
+        opset_version=17,
+        input_names=["observation"],
+        output_names=["action"],
+        dynamo=False,
+    )
